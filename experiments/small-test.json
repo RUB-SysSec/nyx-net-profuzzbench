@@ -1,0 +1,15 @@
+{
+    "trials": 3,
+    "timeout": 2,
+    "nyx_outdir": "/tmp/small-test",
+    "afl_outdir": "/home/kafl/pfb-eval-small-test",
+    "targets": [
+        "forked-daapd",
+        "lightftp"
+    ],
+    "fuzzers": [
+        "nyx",
+        "aflnet",
+        { "type": "aflnet", "no_state": true }
+    ]
+}

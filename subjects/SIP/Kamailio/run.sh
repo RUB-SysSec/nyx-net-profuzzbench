@@ -5,6 +5,7 @@ OUTDIR=$2     #name of the output folder
 OPTIONS=$3    #all configured options -- to make it flexible, we only fix some options (e.g., -i, -o, -N) in this script
 TIMEOUT=$4    #time for fuzzing
 SKIPCOUNT=$5  #used for calculating cov over time. e.g., SKIPCOUNT=5 means we run gcovr after every 5 test cases
+NO_SEEDS=$6
 
 strstr() {
   [ "${1#*$2*}" = "$1" ] && return 1
@@ -19,7 +20,24 @@ if $(strstr $FUZZER "afl"); then
   export KAMAILIO_RUNTIME_DIR=${WORKDIR}/kamailio/runtime_dir
   cd $WORKDIR
 
-  timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz -d -i ${WORKDIR}/in-sip -o $OUTDIR -N udp://127.0.0.1/5060 $OPTIONS ./kamailio/src/kamailio -f ${WORKDIR}/kamailio-basic.cfg -L $KAMAILIO_MODULES -Y $KAMAILIO_RUNTIME_DIR -n 1 -D -E
+  if [ "$NO_SEEDS" = 1 ]; then
+    INPUTS="$WORKDIR/in-sip-empty"
+  else
+    INPUTS="$WORKDIR/in-sip"
+  fi
+
+  if [ "$FUZZER" = "aflpp" ]; then
+    AFL_PRELOAD="/home/ubuntu/preeny/src/desock.so" \
+      timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+        -d -i "$INPUTS" -o $OUTDIR $OPTIONS \
+          ./kamailio/src/kamailio -f ${WORKDIR}/kamailio-basic.cfg \
+          -L $KAMAILIO_MODULES -Y $KAMAILIO_RUNTIME_DIR -n 1 -D -E
+  else
+    timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+      -d -i "$INPUTS" -o $OUTDIR -N udp://127.0.0.1/5060 $OPTIONS \
+        ./kamailio/src/kamailio -f ${WORKDIR}/kamailio-basic.cfg \
+        -L $KAMAILIO_MODULES -Y $KAMAILIO_RUNTIME_DIR -n 1 -D -E
+  fi
 
   #Wait for the fuzzing process
   wait 
@@ -33,6 +51,8 @@ if $(strstr $FUZZER "afl"); then
   #1: the test case is a structured file keeping several request messages
   if [ $FUZZER = "aflnwe" ]; then
     cov_script ${WORKDIR}/${OUTDIR}/ 5060 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 0
+  elif [ "$FUZZER" = "aflpp" ]; then
+    cov_script ${WORKDIR}/${OUTDIR}/default 5060 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 0
   else
     cov_script ${WORKDIR}/${OUTDIR}/ 5060 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 1
   fi
@@ -41,6 +61,7 @@ if $(strstr $FUZZER "afl"); then
   gcovr -r . --html --html-details -o index.html
   mkdir ${WORKDIR}/${OUTDIR}/cov_html/
   cp *.html ${WORKDIR}/${OUTDIR}/cov_html/
+  # genhtml -o "${WORKDIR}/${OUTDIR}/cov_html/" --branch-coverage "$WORKDIR/coverage.info"
 
   #Step-3. Save the result to the ${WORKDIR} folder
   #Tar all results to a file

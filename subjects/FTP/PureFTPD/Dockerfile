@@ -12,6 +12,8 @@ RUN apt-get -y update && \
     git \
     libgnutls-dev \
     python-pip \
+    python-jinja2 \
+    wget \
     nano \
     net-tools \
     vim \
@@ -40,6 +42,16 @@ RUN git clone https://github.com/profuzzbench/aflnwe.git && \
     make clean all && \
     cd llvm_mode && make
 
+RUN wget "https://github.com/AFLplusplus/AFLplusplus/archive/refs/tags/3.12c.tar.gz" \
+        -O AFLplusplus-3.12c.tar.gz \
+ && tar xf AFLplusplus-3.12c.tar.gz \
+ && mv AFLplusplus-3.12c aflpp \
+ && cd aflpp && make all
+
+RUN git clone "https://github.com/zardus/preeny.git" \
+ && cd preeny && git checkout --detach 73d8404 \
+ && cd src && make desock.so
+
 # Set up environment variables for AFLNet
 ENV WORKDIR="/home/ubuntu/experiments"
 ENV AFLNET="/home/ubuntu/aflnet"
@@ -50,15 +62,9 @@ ENV AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
     AFL_NO_AFFINITY=1
 
 RUN mkdir $WORKDIR && \
-    pip install gcovr
+    pip install gcovr==4.2
 
 COPY --chown=ubuntu:ubuntu fuzzing.patch ${WORKDIR}/fuzzing.patch
-COPY --chown=ubuntu:ubuntu gcov.patch ${WORKDIR}/gcov.patch
-COPY --chown=ubuntu:ubuntu in-ftp ${WORKDIR}/in-ftp
-COPY --chown=ubuntu:ubuntu ftp.dict ${WORKDIR}/ftp.dict
-COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
-COPY --chown=ubuntu:ubuntu clean.sh ${WORKDIR}/clean
-COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
 
 # Set up PureFTPD for fuzzing
 RUN cd ${WORKDIR} && \
@@ -70,6 +76,8 @@ RUN cd ${WORKDIR} && \
     CC="afl-clang-fast" CXX="afl-clang-fast++" ./configure --without-privsep -without-capabilities && \
     make
 
+COPY --chown=ubuntu:ubuntu gcov.patch ${WORKDIR}/gcov.patch
+
 # Set up PureFTPD for coverage analysis
 RUN cd ${WORKDIR} && \
     git clone https://github.com/jedisct1/pure-ftpd.git pure-ftpd-gcov && \
@@ -80,8 +88,38 @@ RUN cd ${WORKDIR} && \
     CFLAGS="-fprofile-arcs -ftest-coverage" CPPFLAGS="-fprofile-arcs -ftest-coverage" CXXFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage" ./configure --without-privsep -without-capabilities && \
     make
 
+RUN cd ${WORKDIR} && \
+    git clone https://github.com/jedisct1/pure-ftpd.git pure-ftpd-asan && \
+    cd pure-ftpd-asan && \
+    git checkout c21b45f && \
+    patch -p1 < ${WORKDIR}/fuzzing.patch && \
+    autogen.sh && \
+    CC="afl-clang-fast -fsanitize=address" CXX="afl-clang-fast++ -fsanitize=address" \
+        ./configure --without-privsep -without-capabilities && \
+    make
+
 # Switch default user to root
 USER root
 WORKDIR /home/ubuntu
 
-RUN pip install gcovr
+RUN pip install gcovr==4.2
+
+RUN cd $WORKDIR \
+ && wget "https://github.com/linux-test-project/lcov/releases/download/v1.15/lcov-1.15.tar.gz" \
+ && tar xf "lcov-1.15.tar.gz" \
+ && cd "lcov-1.15" \
+ && make install \
+ && echo "lcov_branch_coverage = 1" > ~/.lcovrc \
+ && echo "lcov_branch_coverage = 1" > /home/ubuntu/.lcovrc
+
+RUN mkdir "${WORKDIR}/in-ftp-empty" \
+ && /bin/echo -n 'A' > "${WORKDIR}/in-ftp-empty/seed.raw" \
+ && mkdir "$WORKDIR/fuzzer-crashes"
+
+COPY --chown=ubuntu:ubuntu in-ftp ${WORKDIR}/in-ftp
+COPY --chown=ubuntu:ubuntu ftp.dict ${WORKDIR}/ftp.dict
+COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
+COPY --chown=ubuntu:ubuntu clean.sh ${WORKDIR}/clean
+COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
+COPY --chown=ubuntu:ubuntu cov_script_nyx.sh ${WORKDIR}/cov_script_nyx
+COPY --chown=ubuntu:ubuntu crashes_stats.sh ${WORKDIR}/crashes_stats.sh

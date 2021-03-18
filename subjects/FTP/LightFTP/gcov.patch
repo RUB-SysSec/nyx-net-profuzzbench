@@ -39,7 +39,7 @@ index d63d993..3d70357 100644
  
  	free(scb);
 diff --git a/Source/main.c b/Source/main.c
-index eaa1a55..dec4434 100644
+index eaa1a55..8fa1d27 100644
 --- a/Source/main.c
 +++ b/Source/main.c
 @@ -11,6 +11,8 @@
@@ -55,25 +55,29 @@ index eaa1a55..dec4434 100644
  				KEYFILE[PATH_MAX],
  				KEYFILE_PASS[256];
  
-+void sig_handler(int signo)
-+{
-+  if (signo == SIGUSR1)
-+    exit(0);
++extern void __gcov_flush();
++static void catch_function(int signal) {
++  __gcov_flush();
++  _exit(0);
 +}
 +
  void TLSInit()
  {
  	while (gnutls_global_init() >= 0)
-@@ -76,7 +84,7 @@ int main(int argc, char *argv[])
+@@ -76,7 +84,11 @@ int main(int argc, char *argv[])
  	int			c;
  	uint32_t	bufsize = 65536;
  	pthread_t	thid;
 -
-+        signal(SIGUSR1, sig_handler);
++	signal(SIGUSR1, catch_function);
++	signal(SIGINT, catch_function);
++	signal(SIGSEGV, catch_function);
++	signal(SIGABRT, catch_function);
++	signal(SIGTERM, catch_function);
  	if (sizeof (off_t) != 8)
  	{
  		printf("off_t is not 64 bits long");
-@@ -106,9 +114,10 @@ int main(int argc, char *argv[])
+@@ -106,9 +118,10 @@ int main(int argc, char *argv[])
  		if (ParseConfig(cfg, CONFIG_SECTION_NAME, "local_mask", textbuf, bufsize))
  			g_cfg.LocalIPMask = inet_addr(textbuf);
  
@@ -87,7 +91,7 @@ index eaa1a55..dec4434 100644
  
  		g_cfg.MaxUsers = 1;
  		if (ParseConfig(cfg, CONFIG_SECTION_NAME, "maxusers", textbuf, bufsize))
-@@ -188,10 +197,8 @@ int main(int argc, char *argv[])
+@@ -188,10 +201,8 @@ int main(int argc, char *argv[])
  			break;
  		}
  

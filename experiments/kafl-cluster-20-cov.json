@@ -1,0 +1,22 @@
+{
+    "trials": 10,
+    "timeout": 1440,
+    "only_cov": true,
+    "nyx_outdir": "/home/kafl/pfb-eval-24h-nyx",
+    "afl_outdir": "/home/kafl/pfb-eval-24h",
+    "targets": [
+        "live555",
+        "kamailio",
+        "exim",
+        "openssh",
+        "openssl"
+    ],
+    "fuzzers": [
+        "nyx",
+        { "type": "nyx", "snaps": "balanced", "path": "/home/kafl/pfb-eval-24h-nyx-snaps" },
+        { "type": "nyx", "snaps": "aggressive", "path": "/home/kafl/pfb-eval-24h-nyx-snaps" },
+        "aflnet",
+        { "type": "aflnet", "no_state": true },
+        "aflnwe"
+    ]
+}

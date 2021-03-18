@@ -5,6 +5,7 @@ OUTDIR=$2     #name of the output folder
 OPTIONS=$3    #all configured options -- to make it flexible, we only fix some options (e.g., -i, -o, -N) in this script
 TIMEOUT=$4    #time for fuzzing
 SKIPCOUNT=$5  #used for calculating cov over time. e.g., SKIPCOUNT=5 means we run gcovr after every 5 test cases
+NO_SEEDS=$6
 
 strstr() {
   [ "${1#*$2*}" = "$1" ] && return 1
@@ -16,7 +17,21 @@ if $(strstr $FUZZER "afl"); then
   #Step-1. Do Fuzzing
   #Move to fuzzing folder
   cd $WORKDIR/live555/testProgs
-  timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz -d -i ${WORKDIR}/in-rtsp -x ${WORKDIR}/rtsp.dict -o $OUTDIR -N tcp://127.0.0.1/8554 $OPTIONS ./testOnDemandRTSPServer 8554
+  if [ "$NO_SEEDS" = 1 ]; then
+    INPUTS="$WORKDIR/in-rtsp-empty"
+  else
+    INPUTS="$WORKDIR/in-rtsp"
+  fi
+  if [ "$FUZZER" = "aflpp" ]; then
+    AFL_PRELOAD="/home/ubuntu/preeny/src/desock.so" \
+      timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+        -d -i "$INPUTS" -x ${WORKDIR}/rtsp.dict -o $OUTDIR \
+        $OPTIONS ./testOnDemandRTSPServer 8554
+  else
+    timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+      -d -i "$INPUTS" -x ${WORKDIR}/rtsp.dict -o $OUTDIR \
+      -N tcp://127.0.0.1/8554 $OPTIONS ./testOnDemandRTSPServer 8554
+  fi
   wait 
 
   #Step-2. Collect code coverage over time
@@ -39,10 +54,10 @@ if $(strstr $FUZZER "afl"); then
     cp $f/include/*.hh $f/
   done
   cd testProgs
-
   gcovr -r .. --html --html-details -o index.html
   mkdir ${WORKDIR}/live555/testProgs/${OUTDIR}/cov_html/
   cp *.html ${WORKDIR}/live555/testProgs/${OUTDIR}/cov_html/
+  # genhtml -o "${WORKDIR}/live555/testProgs/${OUTDIR}/cov_html/" --branch-coverage "$WORKDIR/coverage.info"
 
   #Step-3. Save the result to the ${WORKDIR} folder
   #Tar all results to a file

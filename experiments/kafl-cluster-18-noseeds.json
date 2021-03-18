@@ -1,0 +1,16 @@
+{
+    "trials": 10,
+    "timeout": 1440,
+    "nyx_outdir": "/tmp/pfb-eval-24h",
+    "afl_outdir": "/home/kafl/pfb-eval-24h-noseeds",
+    "targets": [
+        "bftpd",
+        "lightftp",
+        "proftpd",
+        "pure-ftpd"
+    ],
+    "fuzzers": [
+        { "type": "aflnet", "no_state": true, "no_seeds": true },
+        { "type": "nyx", "snaps": "aggressive", "no_seeds": true }
+    ]
+}

@@ -11,6 +11,8 @@ RUN apt-get -y update && \
     git \
     libgnutls28-dev \
     python-pip \
+    python-jinja2 \
+    wget \
     nano \
     net-tools \
     vim \
@@ -45,6 +47,16 @@ RUN git clone https://github.com/profuzzbench/aflnwe.git && \
     make clean all && \
     cd llvm_mode && make
 
+RUN wget "https://github.com/AFLplusplus/AFLplusplus/archive/refs/tags/3.12c.tar.gz" \
+        -O AFLplusplus-3.12c.tar.gz \
+ && tar xf AFLplusplus-3.12c.tar.gz \
+ && mv AFLplusplus-3.12c aflpp \
+ && cd aflpp && make all
+
+RUN git clone "https://github.com/zardus/preeny.git" \
+ && cd preeny && git checkout --detach 73d8404 \
+ && cd src && make desock.so
+
 # Set up environment variables for AFLNet
 ENV WORKDIR="/home/ubuntu/experiments"
 ENV AFLNET="/home/ubuntu/aflnet"
@@ -55,13 +67,11 @@ ENV AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
     AFL_NO_AFFINITY=1
 
 RUN mkdir $WORKDIR && \
-    pip install gcovr
+    pip install gcovr==4.2
 
 COPY --chown=ubuntu:ubuntu forked-daapd.patch ${WORKDIR}/forked-daapd.patch
 COPY --chown=ubuntu:ubuntu forked-daapd-gcov.patch ${WORKDIR}/forked-daapd-gcov.patch
 COPY --chown=ubuntu:ubuntu in-daap ${WORKDIR}/in-daap
-COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
-COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
 COPY --chown=ubuntu:ubuntu MP3 ${WORKDIR}/MP3
 COPY --chown=ubuntu:ubuntu forked-daapd.conf ${WORKDIR}/forked-daapd.conf
 
@@ -76,7 +86,6 @@ RUN cd $WORKDIR && \
     CC=$AFLNET/afl-clang-fast CFLAGS="-DSQLITE_CORE" ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var  --disable-mpd --disable-itunes --disable-lastfm --disable-spotify --disable-verification  --disable-shared --enable-static && \
     make clean all
 
-
 # Download and compile forked-daapd for code coverage analysis
 RUN cd $WORKDIR && \
     git clone https://github.com/ejurgensen/forked-daapd.git forked-daapd-gcov && \
@@ -86,6 +95,16 @@ RUN cd $WORKDIR && \
     patch -p1 < $WORKDIR/forked-daapd-gcov.patch && \
     autoreconf -i && \
     CFLAGS="-DSQLITE_CORE -fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage" ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var  --disable-mpd --disable-itunes --disable-lastfm --disable-spotify --disable-verification  --disable-shared --enable-static && \
+    make clean all
+
+RUN cd $WORKDIR && \
+    git clone https://github.com/ejurgensen/forked-daapd.git forked-daapd-asan && \
+    cd forked-daapd-asan && \
+    git checkout 2ca10d9 && \
+    patch -p1 < $WORKDIR/forked-daapd.patch && \
+    autoreconf -i && \
+    CC=$AFLNET/afl-clang-fast CFLAGS="-DSQLITE_CORE -fsanitize=address" \
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var  --disable-mpd --disable-itunes --disable-lastfm --disable-spotify --disable-verification  --disable-shared --enable-static && \
     make clean all
 
 # Setting up the environment using root account
@@ -104,9 +123,25 @@ RUN mkdir /usr/share/forked-daapd/ && \
 
 RUN ln -s $WORKDIR/MP3 /tmp/MP3
 
+RUN cd $WORKDIR \
+ && wget "https://github.com/linux-test-project/lcov/releases/download/v1.15/lcov-1.15.tar.gz" \
+ && tar xf "lcov-1.15.tar.gz" \
+ && cd "lcov-1.15" \
+ && make install \
+ && echo "lcov_branch_coverage = 1" > ~/.lcovrc \
+ && echo "lcov_branch_coverage = 1" > /home/ubuntu/.lcovrc
+
+COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
+COPY --chown=ubuntu:ubuntu cov_script_nyx.sh ${WORKDIR}/cov_script_nyx
+COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
+COPY --chown=ubuntu:ubuntu crashes_stats.sh ${WORKDIR}/crashes_stats.sh
+
 #The script needs to launch dbus and avahi-daemon using sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Switch back to ubuntu account
 USER ubuntu
-RUN mkdir ${WORKDIR}/db
+RUN mkdir ${WORKDIR}/db \
+ && mkdir "${WORKDIR}/in-daap-empty" \
+ && /bin/echo -n 'A' > "${WORKDIR}/in-daap-empty/seed.raw" \
+ && mkdir "$WORKDIR/fuzzer-crashes"

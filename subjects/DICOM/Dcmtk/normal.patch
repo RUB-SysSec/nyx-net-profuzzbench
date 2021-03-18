@@ -1,5 +1,5 @@
 diff --git a/dcmqrdb/apps/dcmqrscp.cc b/dcmqrdb/apps/dcmqrscp.cc
-index 591fb1ff4..3f2539036 100644
+index 591fb1ff4..baff36ab8 100644
 --- a/dcmqrdb/apps/dcmqrscp.cc
 +++ b/dcmqrdb/apps/dcmqrscp.cc
 @@ -91,7 +91,7 @@ static char rcsid[] = "$dcmtk: " OFFIS_CONSOLE_APPLICATION " v"
@@ -11,3 +11,28 @@ index 591fb1ff4..3f2539036 100644
  OFBool      opt_checkFindIdentifier = OFFalse;
  OFBool      opt_checkMoveIdentifier = OFFalse;
  OFCmdUnsignedInt opt_port = 0;
+@@ -112,9 +112,24 @@ static void mangleAssociationProfileKey(OFString& key)
+   }
+ }
+ 
++#include <signal.h>
++
++extern "C" void __gcov_flush();
++
++static void catch_function(int signal) {
++  __gcov_flush();
++  exit(0);
++}
++
+ int
+ main(int argc, char *argv[])
+ {
++
++  signal(SIGINT, catch_function);
++  signal(SIGSEGV, catch_function);
++  signal(SIGABRT, catch_function);
++  signal(SIGTERM, catch_function);
++
+   OFCondition cond = EC_Normal;
+   OFCmdUnsignedInt overridePort = 0;
+   OFCmdUnsignedInt overrideMaxPDU = 0;

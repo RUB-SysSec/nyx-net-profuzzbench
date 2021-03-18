@@ -1,0 +1,30 @@
+diff --git a/sshd.c b/sshd.c
+index e6fe9f65..0f335994 100644
+--- a/sshd.c
++++ b/sshd.c
+@@ -1349,6 +1349,12 @@ check_ip_options(struct ssh *ssh)
+ #endif /* IP_OPTIONS */
+ }
+ 
++extern void __gcov_flush();
++static void catch_function(int signal) {
++  __gcov_flush();
++  _exit(0);
++}
++
+ /*
+  * Main program for the daemon.
+  */
+@@ -1373,6 +1379,12 @@ main(int ac, char **av)
+ 	Authctxt *authctxt;
+ 	struct connection_info *connection_info = get_connection_info(0, 0);
+ 
++	signal(SIGUSR1, catch_function);
++	signal(SIGINT, catch_function);
++	signal(SIGSEGV, catch_function);
++	signal(SIGABRT, catch_function);
++	signal(SIGTERM, catch_function);
++
+ 	ssh_malloc_init();	/* must be called before any mallocs */
+ 
+ #ifdef HAVE_SECUREWARE

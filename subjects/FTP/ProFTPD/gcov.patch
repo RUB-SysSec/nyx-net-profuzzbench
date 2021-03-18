@@ -1,0 +1,30 @@
+diff --git a/src/main.c b/src/main.c
+index 10246e8a5..1d2394805 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -2257,6 +2257,12 @@ static void show_usage(int exit_code) {
+   exit(exit_code);
+ }
+ 
++extern void __gcov_flush();
++static void catch_function(int signal) {
++  __gcov_flush();
++  _exit(0);
++}
++
+ int main(int argc, char *argv[], char **envp) {
+   int optc, show_version = 0;
+   const char *cmdopts = "D:NVc:d:hlnp:qS:tvX46";
+@@ -2264,6 +2270,12 @@ int main(int argc, char *argv[], char **envp) {
+   socklen_t peerlen;
+   struct sockaddr peer;
+ 
++  signal(SIGUSR1, catch_function);
++  signal(SIGINT, catch_function);
++  signal(SIGSEGV, catch_function);
++  signal(SIGABRT, catch_function);
++  signal(SIGTERM, catch_function);
++
+ #ifdef HAVE_SET_AUTH_PARAMETERS
+   (void) set_auth_parameters(argc, argv);
+ #endif

@@ -50,20 +50,8 @@ index 4690516..b1d2bf3 100644
      snprintf(sessionIdStr, sizeof sessionIdStr, "%08X", sessionId);
    } while (sessionId == 0 || lookupClientSession(sessionIdStr) != NULL);
  
-diff --git a/liveMedia/RTSPServer.cpp b/liveMedia/RTSPServer.cpp
-index 87d723c..01a8b55 100644
---- a/liveMedia/RTSPServer.cpp
-+++ b/liveMedia/RTSPServer.cpp
-@@ -1594,6 +1594,7 @@ void RTSPServer::RTSPClientSession
-     }
-   }
-   if (noSubsessionsRemain) delete this;
-+  //exit(0);
- }
- 
- void RTSPServer::RTSPClientSession
 diff --git a/testProgs/testOnDemandRTSPServer.cpp b/testProgs/testOnDemandRTSPServer.cpp
-index 6bf44c1..e5d8bfd 100644
+index 6bf44c1..0020169 100644
 --- a/testProgs/testOnDemandRTSPServer.cpp
 +++ b/testProgs/testOnDemandRTSPServer.cpp
 @@ -20,6 +20,9 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
@@ -76,29 +64,52 @@ index 6bf44c1..e5d8bfd 100644
  
  UsageEnvironment* env;
  
-@@ -38,6 +41,13 @@ static void announceStream(RTSPServer* rtspServer, ServerMediaSession* sms,
+@@ -38,6 +41,7 @@ static void announceStream(RTSPServer* rtspServer, ServerMediaSession* sms,
  
  static char newDemuxWatchVariable;
  
 +
-+void sig_handler(int signo)
-+{
-+  if (signo == SIGUSR1)
-+    exit(0);
-+}
-+
  static MatroskaFileServerDemux* matroskaDemux;
  static void onMatroskaDemuxCreation(MatroskaFileServerDemux* newDemux, void* /*clientData*/) {
    matroskaDemux = newDemux;
-@@ -51,6 +61,7 @@ static void onOggDemuxCreation(OggFileServerDemux* newDemux, void* /*clientData*
+@@ -50,7 +54,36 @@ static void onOggDemuxCreation(OggFileServerDemux* newDemux, void* /*clientData*
+   newDemuxWatchVariable = 1;
  }
  
++#include <err.h>
++#include <signal.h>
++
++extern "C" void __gcov_flush();
++
++static char catch_function_reentry = 0;
++static void catch_function(int signal) {
++  if (catch_function_reentry) _exit(0);
++  catch_function_reentry=1;
++  __gcov_flush();
++  _exit(0);
++}
++
  int main(int argc, char** argv) {
-+  signal(SIGUSR1, sig_handler);
++  struct sigaction act;
++  act.sa_handler = catch_function;
++  act.sa_flags = 0;
++  if (sigfillset(&act.sa_mask) == -1)
++    err(1, "sigfillset");
++#define SETSIG(sig)                                                            \
++  {                                                                            \
++    if (sigaction(sig, &act, NULL) == -1)                                      \
++      err(1, "sigaction(%d)", sig);                                            \
++  }
++  SETSIG(SIGUSR1);
++  SETSIG(SIGINT);
++  SETSIG(SIGSEGV);
++  SETSIG(SIGABRT);
++  SETSIG(SIGTERM);
++#undef SETSIG
    // Begin by setting up our usage environment:
    TaskScheduler* scheduler = BasicTaskScheduler::createNew();
    env = BasicUsageEnvironment::createNew(*scheduler);
-@@ -65,7 +76,7 @@ int main(int argc, char** argv) {
+@@ -65,7 +98,7 @@ int main(int argc, char** argv) {
  #endif
  
    // Create the RTSP server:

@@ -1,0 +1,32 @@
+diff --git a/apps/openssl.c b/apps/openssl.c
+index 558f662e14..63a4e454ea 100644
+--- a/apps/openssl.c
++++ b/apps/openssl.c
+@@ -226,6 +226,14 @@ static void setup_trace(const char *str)
+ }
+ #endif /* OPENSSL_NO_TRACE */
+ 
++#include <signal.h>
++#include <unistd.h>
++extern void __gcov_flush();
++static void catch_function(int signal) {
++    __gcov_flush();
++    _exit(0);
++}
++
+ int main(int argc, char *argv[])
+ {
+     FUNCTION f, *fp;
+@@ -236,6 +244,12 @@ int main(int argc, char *argv[])
+     ARGS arg;
+     int first, n, i, ret = 0;
+ 
++    signal(SIGUSR1, catch_function);
++    signal(SIGINT, catch_function);
++    signal(SIGSEGV, catch_function);
++    signal(SIGABRT, catch_function);
++    signal(SIGTERM, catch_function);
++
+     arg.argv = NULL;
+     arg.size = 0;
+ 

@@ -13,6 +13,8 @@ RUN apt-get -y update && \
     libssl-dev \
     sshpass \
     python-pip \
+    python-jinja2 \
+    wget \
     nano \
     net-tools \
     vim
@@ -37,6 +39,16 @@ RUN git clone https://github.com/profuzzbench/aflnwe.git && \
     make clean all && \
     cd llvm_mode && make
 
+RUN wget "https://github.com/AFLplusplus/AFLplusplus/archive/refs/tags/3.12c.tar.gz" \
+        -O AFLplusplus-3.12c.tar.gz \
+ && tar xf AFLplusplus-3.12c.tar.gz \
+ && mv AFLplusplus-3.12c aflpp \
+ && cd aflpp && make all
+
+RUN git clone "https://github.com/zardus/preeny.git" \
+ && cd preeny && git checkout --detach 73d8404 \
+ && cd src && make desock.so
+
 # Set up environment variables for AFLNet
 ENV WORKDIR="/home/ubuntu/experiments"
 ENV AFLNET="/home/ubuntu/aflnet"
@@ -47,12 +59,7 @@ ENV AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
     AFL_NO_AFFINITY=1
 
 RUN mkdir $WORKDIR && \
-    pip install gcovr
-
-COPY --chown=ubuntu:ubuntu in-ssh ${WORKDIR}/in-ssh
-COPY --chown=ubuntu:ubuntu ssh.dict ${WORKDIR}/ssh.dict
-COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
-COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
+    pip install gcovr==4.2
 
 # Download and compile OpenSSH for fuzzing
 RUN cd ${WORKDIR} && \
@@ -70,11 +77,14 @@ RUN cd ${WORKDIR} && \
     make && \
     make install
 
+COPY --chown=ubuntu:ubuntu gcov.patch ${WORKDIR}/gcov.patch
+
 # Download and compile OpenSSH for coverage analysis
 RUN cd ${WORKDIR} && \
     git clone https://github.com/vegard/openssh-portable.git openssh-gcov && \
     cd openssh-gcov && \
     git checkout 7cfea58 && \
+    patch -p1 < ${WORKDIR}/gcov.patch && \
     autoreconf && \
     ./configure \
     CC="gcc" \
@@ -90,4 +100,20 @@ RUN cd ${WORKDIR} && \
 # Run sshd and ssh once before fuzzing
 RUN cd ${WORKDIR}/openssh && \
     ./sshd -d -e -p 22 -r -f sshd_config > /dev/null 2>&1 & sleep 5; sshpass -p "ubuntu" ssh -oStrictHostKeyChecking=no ubuntu@127.0.0.1 -p 22
-    
+
+RUN cd $WORKDIR \
+ && wget "https://github.com/linux-test-project/lcov/releases/download/v1.15/lcov-1.15.tar.gz" \
+ && tar xf "lcov-1.15.tar.gz" \
+ && cd "lcov-1.15" \
+ && make install \
+ && echo "lcov_branch_coverage = 1" > ~/.lcovrc \
+ && echo "lcov_branch_coverage = 1" > /home/ubuntu/.lcovrc
+
+RUN mkdir "${WORKDIR}/in-ssh-empty" \
+ && /bin/echo -n 'A' > "${WORKDIR}/in-ssh-empty/seed.raw"
+
+COPY --chown=ubuntu:ubuntu in-ssh ${WORKDIR}/in-ssh
+COPY --chown=ubuntu:ubuntu ssh.dict ${WORKDIR}/ssh.dict
+COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
+COPY --chown=ubuntu:ubuntu cov_script_nyx.sh ${WORKDIR}/cov_script_nyx
+COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run

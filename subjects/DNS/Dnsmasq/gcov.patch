@@ -1,0 +1,30 @@
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 19a6428..b400ede 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -32,6 +32,12 @@ static void fatal_event(struct event_desc *ev, char *msg);
+ static int read_event(int fd, struct event_desc *evp, char **msg);
+ static void poll_resolv(int force, int do_reload, time_t now);
+ 
++extern void __gcov_flush();
++static void catch_function(int signal) {
++  __gcov_flush();
++  _exit(0);
++}
++
+ int main (int argc, char **argv)
+ {
+   int bind_fallback = 0;
+@@ -62,6 +68,12 @@ int main (int argc, char **argv)
+   int tftp_prefix_missing = 0;
+ #endif
+ 
++  signal(SIGUSR1, catch_function);
++  signal(SIGINT, catch_function);
++  signal(SIGSEGV, catch_function);
++  signal(SIGABRT, catch_function);
++  signal(SIGTERM, catch_function);
++
+ #ifdef LOCALEDIR
+   setlocale(LC_ALL, "");
+   bindtextdomain("dnsmasq", LOCALEDIR); 

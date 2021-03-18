@@ -5,6 +5,7 @@ OUTDIR=$2     #name of the output folder
 OPTIONS=$3    #all configured options -- to make it flexible, we only fix some options (e.g., -i, -o, -N) in this script
 TIMEOUT=$4    #time for fuzzing
 SKIPCOUNT=$5  #used for calculating cov over time. e.g., SKIPCOUNT=5 means we run gcovr after every 5 test cases
+NO_SEEDS=$6
 strstr() {
   [ "${1#*$2*}" = "$1" ] && return 1
   return 0
@@ -15,7 +16,21 @@ if $(strstr $FUZZER "afl"); then
   #Step-1. Do Fuzzing
   #Move to fuzzing folder
   cd $WORKDIR
-  timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz -d -i ${WORKDIR}/in-dtls -o $OUTDIR -N udp://127.0.0.1/20220 $OPTIONS ./tinydtls/tests/dtls-server
+  if [ "$NO_SEEDS" = 1 ]; then
+    INPUTS="$WORKDIR/in-dtls-empty"
+  else
+    INPUTS="$WORKDIR/in-dtls"
+  fi
+  if [ "$FUZZER" = "aflpp" ]; then
+    AFL_PRELOAD="/home/ubuntu/preeny/src/desock.so" \
+      timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+        -d -i "$INPUTS" -o $OUTDIR $OPTIONS \
+        ./tinydtls/tests/dtls-server
+  else
+    timeout -k 0 $TIMEOUT /home/ubuntu/${FUZZER}/afl-fuzz \
+      -d -i "$INPUTS" -o $OUTDIR -N udp://127.0.0.1/20220 $OPTIONS \
+      ./tinydtls/tests/dtls-server
+  fi
   wait 
 
   #Step-2. Collect code coverage over time
@@ -27,6 +42,8 @@ if $(strstr $FUZZER "afl"); then
   #1: the test case is a structured file keeping several request messages
   if [ $FUZZER == "aflnwe" ]; then
     cov_script ${WORKDIR}/${OUTDIR}/ 20220 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 0
+  elif [ "$FUZZER" = "aflpp" ]; then
+    cov_script ${WORKDIR}/${OUTDIR}/default 20220 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 0
   else
     cov_script ${WORKDIR}/${OUTDIR}/ 20220 ${SKIPCOUNT} ${WORKDIR}/${OUTDIR}/cov_over_time.csv 1
   fi
@@ -34,6 +51,7 @@ if $(strstr $FUZZER "afl"); then
   gcovr -r $WORKDIR/tinydtls-gcov --html --html-details -o index.html
   mkdir ${WORKDIR}/${OUTDIR}/cov_html/
   cp *.html ${WORKDIR}/${OUTDIR}/cov_html/
+  # genhtml -o "${WORKDIR}/${OUTDIR}/cov_html/" --branch-coverage "$WORKDIR/coverage.info"
 
   #Step-3. Save the result to the ${WORKDIR} folder
   #Tar all results to a file

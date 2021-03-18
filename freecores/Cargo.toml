@@ -1,0 +1,9 @@
+[package]
+name = "freecores"
+version = "0.1.0"
+authors = ["acidghost"]
+edition = "2018"
+
+[dependencies]
+regex = "1"
+structopt = { version = "0.3", default-features = false }

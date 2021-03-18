@@ -1,0 +1,56 @@
+--- configure	2021-05-14 17:04:27.000000000 +0200
++++ configure-updated	2021-05-14 16:40:40.193822579 +0200
+@@ -42,6 +42,8 @@
+ ######################################################################
+ #
+ 
++smtp_enforce_sync = false
++
+ # Specify your host's canonical name here. This should normally be the fully
+ # qualified "official" name of your host. If this option is not set, the
+ # uname() function is called to obtain the name. In many cases this does
+@@ -359,7 +361,6 @@
+   # testing for an empty sending host field.
+ 
+   accept  hosts = :
+-          control = dkim_disable_verify
+ 
+   #############################################################################
+   # The following section of the ACL is concerned with local parts that contain
+@@ -438,7 +439,6 @@
+ 
+   accept  hosts         = +relay_from_hosts
+           control       = submission
+-          control       = dkim_disable_verify
+ 
+   # Accept if the message arrived over an authenticated connection, from
+   # any host. Again, these messages are usually from MUAs, so recipient
+@@ -447,7 +447,6 @@
+ 
+   accept  authenticated = *
+           control       = submission
+-          control       = dkim_disable_verify
+ 
+   # Insist that a HELO/EHLO was accepted.
+ 
+@@ -577,14 +576,14 @@
+ # If the DNS lookup fails, no further routers are tried because of the no_more
+ # setting, and consequently the address is unrouteable.
+ 
+-dnslookup:
+-  driver = dnslookup
+-  domains = ! +local_domains
+-  transport = remote_smtp
+-  ignore_target_hosts = 0.0.0.0 : 127.0.0.0/8
++#dnslookup:
++#  driver = dnslookup
++#  domains = ! +local_domains
++#  transport = remote_smtp
++#  ignore_target_hosts = 0.0.0.0 : 127.0.0.0/8
+ # if ipv6-enabled then instead use:
+ # ignore_target_hosts = <; 0.0.0.0 ; 127.0.0.0/8 ; ::1
+-  no_more
++#  no_more
+ 
+ 
+ # This alternative router can be used when you want to send all mail to a

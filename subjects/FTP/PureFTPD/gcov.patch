@@ -1,5 +1,5 @@
 diff --git a/src/ftpd.c b/src/ftpd.c
-index 60b95b6..a4d7c57 100644
+index 60b95b6..787ff89 100644
 --- a/src/ftpd.c
 +++ b/src/ftpd.c
 @@ -299,7 +299,7 @@ void _EXIT(const int status)
@@ -28,3 +28,29 @@ index 60b95b6..a4d7c57 100644
      if (child == (pid_t) 0) {
          if (isatty(2)) {
              (void) close(2);
+@@ -5438,6 +5439,12 @@ static struct passwd *fakegetpwnam(const char * const name)
+ }
+ #endif
+ 
++extern void __gcov_flush();
++static void catch_function(int signal) {
++  __gcov_flush();
++  _exit(0);
++}
++
+ int pureftpd_start(int argc, char *argv[], const char *home_directory_)
+ {
+ #ifndef NO_GETOPT_LONG
+@@ -5447,6 +5454,12 @@ int pureftpd_start(int argc, char *argv[], const char *home_directory_)
+     int bypass_ipv6 = 0;
+     struct passwd *pw;
+ 
++    signal(SIGUSR1, catch_function);
++    signal(SIGINT, catch_function);
++    signal(SIGSEGV, catch_function);
++    signal(SIGABRT, catch_function);
++    signal(SIGTERM, catch_function);
++
+     (void) home_directory_;
+ #ifdef NON_ROOT_FTP
+     home_directory = home_directory_;

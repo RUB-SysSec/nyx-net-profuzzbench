@@ -11,6 +11,8 @@ RUN apt-get -y update && \
     git \
     libgnutls-dev \
     python-pip \
+    python-jinja2 \
+    wget \
     nano \
     net-tools \
     vim
@@ -37,6 +39,16 @@ RUN git clone https://github.com/profuzzbench/aflnwe.git && \
     make clean all && \
     cd llvm_mode && make
 
+RUN wget "https://github.com/AFLplusplus/AFLplusplus/archive/refs/tags/3.12c.tar.gz" \
+        -O AFLplusplus-3.12c.tar.gz \
+ && tar xf AFLplusplus-3.12c.tar.gz \
+ && mv AFLplusplus-3.12c aflpp \
+ && cd aflpp && make all
+
+RUN git clone "https://github.com/zardus/preeny.git" \
+ && cd preeny && git checkout --detach 73d8404 \
+ && cd src && make desock.so
+
 # Set up environment variables for AFLNet
 ENV WORKDIR="/home/ubuntu/experiments"
 ENV AFLNET="/home/ubuntu/aflnet"
@@ -47,16 +59,9 @@ ENV AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
     AFL_NO_AFFINITY=1
 
 RUN mkdir $WORKDIR && \
-    pip install gcovr
+    pip install gcovr==4.2
 
 COPY --chown=ubuntu:ubuntu fuzzing.patch ${WORKDIR}/fuzzing.patch
-COPY --chown=ubuntu:ubuntu gcov.patch ${WORKDIR}/gcov.patch
-COPY --chown=ubuntu:ubuntu kill-server.sh ${WORKDIR}/kill-server
-COPY --chown=ubuntu:ubuntu in-rtsp ${WORKDIR}/in-rtsp
-COPY --chown=ubuntu:ubuntu rtsp.dict ${WORKDIR}/rtsp.dict
-COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
-COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
-    
 
 # Download and compile Live555 for fuzzing
 RUN cd $WORKDIR && \
@@ -71,6 +76,8 @@ RUN cd $WORKDIR && \
 RUN cd ${WORKDIR}/live555/testProgs && \
     cp ${AFLNET}/tutorials/live555/sample_media_sources/*.* ./
 
+COPY --chown=ubuntu:ubuntu gcov.patch ${WORKDIR}/gcov.patch
+
 # Download and compile Live555 for coverage analysis
 RUN cd $WORKDIR && \
     git clone https://github.com/rgaufman/live555.git live555-cov && \
@@ -83,3 +90,33 @@ RUN cd $WORKDIR && \
 # Set up Live555 for coverage analysis
 RUN cd ${WORKDIR}/live555-cov/testProgs && \
     cp ${AFLNET}/tutorials/live555/sample_media_sources/*.* ./
+
+COPY --chown=ubuntu:ubuntu asan.patch ${WORKDIR}/asan.patch
+RUN cd $WORKDIR && \
+    git clone https://github.com/rgaufman/live555.git live555-asan && \
+    cd live555-asan && \
+    git checkout ceeb4f4 && \
+    patch -p1 < $WORKDIR/asan.patch && \
+    ./genMakefiles linux && \
+    make clean all && \
+    cd ${WORKDIR}/live555-asan/testProgs && \
+    cp ${AFLNET}/tutorials/live555/sample_media_sources/*.* ./
+
+RUN cd $WORKDIR \
+ && wget "https://github.com/linux-test-project/lcov/releases/download/v1.15/lcov-1.15.tar.gz" \
+ && tar xf "lcov-1.15.tar.gz" \
+ && cd "lcov-1.15" \
+ && make PREFIX=~/.local install \
+ && echo "lcov_branch_coverage = 1" > ~/.lcovrc
+
+RUN mkdir "${WORKDIR}/in-rtsp-empty" \
+ && /bin/echo -n 'A' > "${WORKDIR}/in-rtsp-empty/seed.raw" \
+ && mkdir "$WORKDIR/fuzzer-crashes"
+
+COPY --chown=ubuntu:ubuntu in-rtsp ${WORKDIR}/in-rtsp
+COPY --chown=ubuntu:ubuntu rtsp.dict ${WORKDIR}/rtsp.dict
+COPY --chown=ubuntu:ubuntu kill-server.sh ${WORKDIR}/kill-server
+COPY --chown=ubuntu:ubuntu cov_script.sh ${WORKDIR}/cov_script
+COPY --chown=ubuntu:ubuntu cov_script_nyx.sh ${WORKDIR}/cov_script_nyx
+COPY --chown=ubuntu:ubuntu run.sh ${WORKDIR}/run
+COPY --chown=ubuntu:ubuntu crashes_stats.sh ${WORKDIR}/crashes_stats.sh

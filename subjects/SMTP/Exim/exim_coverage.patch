@@ -1,0 +1,329 @@
+diff --git a/src/src/child.c b/src/src/child.c
+index de12c44..dba039d 100644
+--- a/src/src/child.c
++++ b/src/src/child.c
+@@ -10,6 +10,8 @@
+ 
+ static void (*oldsignal)(int);
+ 
++extern void __gcov_flush(void);
++
+ 
+ /*************************************************
+ *          Ensure an fd has a given value        *
+@@ -158,6 +160,7 @@ log_write(0,
+ /* Get here if exec_type == CEE_EXEC_EXIT.
+ Note: this must be _exit(), not exit(). */
+ 
++__gcov_flush();
+ _exit(EX_EXECFAILED);
+ 
+ return NULL;   /* To keep compilers happy */
+@@ -400,6 +403,7 @@ if (pid == 0)
+   this information. */
+ 
+   CHILD_FAILED:
++	__gcov_flush();
+   _exit(EX_EXECFAILED);      /* Note: must be _exit(), NOT exit() */
+   }
+ 
+diff --git a/src/src/daemon.c b/src/src/daemon.c
+index 2935d0a..354457c 100644
+--- a/src/src/daemon.c
++++ b/src/src/daemon.c
+@@ -10,6 +10,8 @@
+ 
+ #include "exim.h"
+ 
++void __gcov_flush();
++
+ 
+ /* Structure for holding data for each SMTP connection */
+ 
+@@ -399,6 +401,7 @@ if (pid == 0)
+           "please try again later.\r\n");
+         mac_smtp_fflush();
+         search_tidyup();
++	__gcov_flush();
+         _exit(EXIT_FAILURE);
+         }
+       }
+@@ -485,6 +488,7 @@ if (pid == 0)
+     {
+     mac_smtp_fflush();
+     search_tidyup();
++    __gcov_flush();
+     _exit(EXIT_SUCCESS);
+     }
+ 
+@@ -512,6 +516,7 @@ if (pid == 0)
+         {
+         mac_smtp_fflush();
+         smtp_log_no_mail();               /* Log no mail if configured */
++        __gcov_flush();
+         _exit(EXIT_SUCCESS);
+         }
+       if (message_id[0] == 0) continue;   /* No message was accepted */
+@@ -534,6 +539,7 @@ if (pid == 0)
+       /*XXX should we pause briefly, hoping that the client will be the
+       active TCP closer hence get the TCP_WAIT endpoint? */
+       DEBUG(D_receive) debug_printf("SMTP>>(close on process exit)\n");
++      __gcov_flush();
+       _exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
+       }
+ 
+@@ -674,6 +680,7 @@ if (pid == 0)
+ 
+         (void)deliver_message(message_id, FALSE, FALSE);
+         search_tidyup();
++        __gcov_flush();
+         _exit(EXIT_SUCCESS);
+         }
+ 
+@@ -1881,6 +1888,7 @@ for (;;)
+           /* No need to re-exec; SIGALRM remains set to the default handler */
+ 
+           queue_run(NULL, NULL, FALSE);
++          __gcov_flush();
+           _exit(EXIT_SUCCESS);
+           }
+ 
+diff --git a/src/src/exim.c b/src/src/exim.c
+index a6a1ea8..bb1cd23 100644
+--- a/src/src/exim.c
++++ b/src/src/exim.c
+@@ -23,6 +23,8 @@ Also a few functions that don't naturally fit elsewhere. */
+ # endif
+ #endif
+ 
++void __gcov_flush();
++
+ extern void init_lookup_list(void);
+ 
+ 
+@@ -665,6 +667,7 @@ search_tidyup();
+ DEBUG(D_any)
+   debug_printf(">>>>>>>>>>>>>>>> Exim pid=%d terminating with rc=%d "
+     ">>>>>>>>>>>>>>>>\n", (int)getpid(), rc);
++__gcov_flush();
+ exit(rc);
+ }
+ 
+@@ -1463,6 +1466,15 @@ return TRUE;
+ }
+ 
+ 
++static char catch_function_reentry = 0;
++static void catch_function(int signal) {
++  if (catch_function_reentry) _exit(0);
++  catch_function_reentry=1;
++  __gcov_flush();
++  _exit(0);
++}
++
++
+ /*************************************************
+ *          Entry point and high-level code       *
+ *************************************************/
+@@ -1574,6 +1586,18 @@ extern char **environ;
+ defined by ref:name at build time, we must now find the actual uid/gid values.
+ This is a feature to make the lives of binary distributors easier. */
+ 
++struct sigaction act;
++  act.sa_handler = catch_function;
++  act.sa_flags = 0;
++  if (sigfillset(&act.sa_mask) == -1)
++    err(1, "sigfillset");
++#define SETSIG(sig)                                                            \
++  {                                                                            \
++    if (sigaction(sig, &act, NULL) == -1)                                      \
++      err(1, "sigaction(%d)", sig);                                            \
++  }
++SETSIG(SIGTERM);
++
+ #ifdef EXIM_USERNAME
+ if (route_finduser(US EXIM_USERNAME, &pw, &exim_uid))
+   {
+@@ -4645,6 +4669,7 @@ if (msg_action_arg > 0 && msg_action != MSG_LOAD)
+     else if ((pid = fork()) == 0)
+       {
+       (void)deliver_message(argv[i], forced_delivery, deliver_give_up);
++	__gcov_flush();
+       _exit(EXIT_SUCCESS);
+       }
+     else if (pid < 0)
+@@ -5750,6 +5775,7 @@ while (more)
+ 
+       rc = deliver_message(message_id, FALSE, FALSE);
+       search_tidyup();
++	__gcov_flush();
+       _exit((!mua_wrapper || rc == DELIVER_MUA_SUCCEEDED)?
+         EXIT_SUCCESS : EXIT_FAILURE);
+       }
+diff --git a/src/src/log.c b/src/src/log.c
+index ddd7137..7c3a613 100644
+--- a/src/src/log.c
++++ b/src/src/log.c
+@@ -322,6 +322,7 @@ if (pid == 0)
+   if (setuid(exim_uid) < 0)
+     die(US"exim: setuid for log-file creation failed, aborting",
+       US"Unexpected log failure, please try later");
++__gcov_flush();
+   _exit((log_create(name) < 0)? 1 : 0);
+   }
+ 
+diff --git a/src/src/queue.c b/src/src/queue.c
+index 50e4aae..94b2e6e 100644
+--- a/src/src/queue.c
++++ b/src/src/queue.c
+@@ -10,6 +10,8 @@
+ 
+ #include "exim.h"
+ 
++extern void __gcov_flush(void);
++
+ 
+ 
+ /* Routines with knowledge of spool layout */
+@@ -657,6 +659,7 @@ for (i  = (queue_run_in_order? -1 : 0);
+       if (running_in_test_harness) millisleep(100);
+       (void)close(pfd[pipe_read]);
+       rc = deliver_message(f->text, force_delivery, FALSE);
++	__gcov_flush();
+       _exit(rc == DELIVER_NOT_ATTEMPTED);
+       }
+     if (pid < 0)
+diff --git a/src/src/rda.c b/src/src/rda.c
+index 995909b..ad76088 100644
+--- a/src/src/rda.c
++++ b/src/src/rda.c
+@@ -12,6 +12,8 @@ this in a sub-process if a uid/gid are supplied. */
+ 
+ #include "exim.h"
+ 
++void __gcov_flush();
++
+ enum { FILE_EXIST, FILE_NOT_EXIST, FILE_EXIST_UNCLEAR };
+ 
+ #define REPLY_EXISTS    0x01
+@@ -779,6 +781,7 @@ if ((pid = fork()) == 0)
+ out:
+   (void)close(fd);
+   search_tidyup();
++   __gcov_flush();
+   _exit(0);
+ 
+ bad:
+diff --git a/src/src/route.c b/src/src/route.c
+index 08b3e05..39e5ab9 100644
+--- a/src/src/route.c
++++ b/src/src/route.c
+@@ -10,6 +10,8 @@
+ 
+ #include "exim.h"
+ 
++void __gcov_flush();
++
+ 
+ 
+ /* Generic options for routers, all of which live inside router_instance
+@@ -733,8 +735,9 @@ while ((check = string_nextinlist(&listptr, &sep, buffer, sizeof(buffer))))
+       {
+       exim_setugid(uid, gid, TRUE,
+         string_sprintf("require_files check, file=%s", ss));
+-      if (route_check_access(ss, uid, gid, 4)) _exit(0);
++      if (route_check_access(ss, uid, gid, 4)){ __gcov_flush(); _exit(0);}
+       DEBUG(D_route) debug_printf("route_check_access() failed\n");
++	__gcov_flush();
+       _exit(1);
+       }
+ 
+diff --git a/src/src/smtp_in.c b/src/src/smtp_in.c
+index 1b45f84..0c30bc9 100644
+--- a/src/src/smtp_in.c
++++ b/src/src/smtp_in.c
+@@ -3243,6 +3243,9 @@ int rc;
+ uschar *user_msg = NULL;
+ uschar *log_msg = NULL;
+ 
++
++__gcov_flush();
++
+ /* Check for recursive acll */
+ 
+ if (smtp_exit_function_called)
+@@ -5455,6 +5458,7 @@ while (done <= 0)
+         execv(CS argv[0], (char *const *)argv);
+         log_write(0, LOG_MAIN|LOG_PANIC_DIE, "exec of \"%s\" (ETRN) failed: %s",
+           etrn_command, strerror(errno));
++__gcov_flush();
+         _exit(EXIT_FAILURE);         /* paranoia */
+         }
+ 
+@@ -5477,6 +5481,7 @@ while (done <= 0)
+         }
+ 
+       enq_end(etrn_serialize_key);
++__gcov_flush();
+       _exit(EXIT_SUCCESS);
+       }
+ 
+diff --git a/src/src/transport.c b/src/src/transport.c
+index b8a4636..6f43c03 100644
+--- a/src/src/transport.c
++++ b/src/src/transport.c
+@@ -15,6 +15,8 @@ transports. */
+ #include <sys/sendfile.h>
+ #endif
+ 
++void __gcov_flush();
++
+ /* Structure for keeping list of addresses that have been added to
+ Envelope-To:, in order to avoid duplication. */
+ 
+@@ -1333,6 +1335,7 @@ if ((write_pid = fork()) == 0)
+         != sizeof(int)
+      )
+     rc = FALSE;	/* compiler quietening */
++   __gcov_flush();
+   _exit(0);
+   }
+ save_errno = errno;
+@@ -1967,7 +1970,8 @@ if ((pid = fork()) == 0)
+   write the log, etc., so that the output is always in the same order for
+   automatic comparison. */
+ 
+-  if ((pid = fork()) != 0) _exit(EXIT_SUCCESS);
++  if ((pid = fork()) != 0){ __gcov_flush(); _exit(EXIT_SUCCESS);}
++
+   if (running_in_test_harness) sleep(1);
+ 
+   /* Set up the calling arguments; use the standard function for the basics,
+@@ -2013,6 +2017,7 @@ if ((pid = fork()) == 0)
+   execv(CS argv[0], (char *const *)argv);
+ 
+   DEBUG(D_any) debug_printf("execv failed: %s\n", strerror(errno));
++  __gcov_flush();
+   _exit(errno);         /* Note: must be _exit(), NOT exit() */
+   }
+ 
+diff --git a/src/src/transports/pipe.c b/src/src/transports/pipe.c
+index 8b87e4a..47f374d 100644
+--- a/src/src/transports/pipe.c
++++ b/src/src/transports/pipe.c
+@@ -13,6 +13,7 @@
+ #include <login_cap.h>
+ #endif
+ 
++void __gcov_flush();
+ 
+ 
+ /* Options specific to the pipe transport. They must be in alphabetic
+@@ -786,6 +787,7 @@ if (outpid == 0)
+       }
+     }
+   (void)close(fd_out);
++  __gcov_flush();
+   _exit(0);
+   }
+ 

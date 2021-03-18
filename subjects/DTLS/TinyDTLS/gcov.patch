@@ -1,40 +1,49 @@
+diff --git a/Makefile b/Makefile
+index 564cc08..516fd98 100644
+--- a/Makefile
++++ b/Makefile
+@@ -26,7 +26,7 @@ SOURCES+= dtls-log.c
+ SOURCES+= aes/rijndael.c ecc/ecc.c sha2/sha2.c $(DTLS_SUPPORT)/dtls-support.c
+ OBJECTS:= $(SOURCES:.c=.o)
+ # CFLAGS:=-Wall -pedantic -std=c99 -g -O2 -I. -I$(DTLS_SUPPORT)
+-CFLAGS:=-DLOG_LEVEL_DTLS=$(LOG_LEVEL_DTLS) -Wall -std=c99 -g -O2 -I. -I$(DTLS_SUPPORT)
++CFLAGS:=-DLOG_LEVEL_DTLS=$(LOG_LEVEL_DTLS) -Wall -std=c99 -g -O2 -fprofile-arcs -ftest-coverage -I. -I$(DTLS_SUPPORT)
+ LIB:=libtinydtls.a
+ LDFLAGS:=
+ ARFLAGS:=cru
 diff --git a/tests/dtls-server.c b/tests/dtls-server.c
-index ab8f316..b1db186 100644
+index ab8f316..881e9dc 100644
 --- a/tests/dtls-server.c
 +++ b/tests/dtls-server.c
-@@ -43,13 +43,12 @@ static const unsigned char ecdsa_pub_key_y[] = {
+@@ -43,13 +43,13 @@ static const unsigned char ecdsa_pub_key_y[] = {
  			0xD0, 0x43, 0xB1, 0xFB, 0x03, 0xE2, 0x2F, 0x4D,
  			0x17, 0xDE, 0x43, 0xF9, 0xF9, 0xAD, 0xEE, 0x70};
  
 -#if 0
-+static int quit = 0;
  /* SIGINT handler: set quit to 1 for graceful termination */
 -void
 -handle_sigint(int signum) {
 -  dsrv_stop(dsrv_get_context());
-+void handle_sigusr1(int signum) {
-+  quit = 1;
++extern void __gcov_flush();
++static void catch_function(int signum) {
++  __gcov_flush();
++  _exit(0);
  }
 -#endif
 +
  #ifdef DTLS_PSK
  /* This function is the "key store" for tinyDTLS. It is called to
   * retrieve a key for the given identity within this particular
-@@ -262,6 +261,8 @@ main(int argc, char **argv) {
+@@ -262,6 +262,12 @@ main(int argc, char **argv) {
    int on = 1;
    struct sockaddr_in6 listen_addr;
  
-+  signal(SIGUSR1, handle_sigusr1);
++  signal(SIGUSR1, catch_function);
++  signal(SIGINT, catch_function);
++  signal(SIGSEGV, catch_function);
++  signal(SIGABRT, catch_function);
++  signal(SIGTERM, catch_function);
 +
    memset(&listen_addr, 0, sizeof(struct sockaddr_in6));
  
    /* fill extra field for 4.4BSD-based systems (see RFC 3493, section 3.4) */
-@@ -328,7 +329,7 @@ main(int argc, char **argv) {
- 
-   dtls_set_handler(the_context, &cb);
- 
--  while (1) {
-+  while (!quit) {
-     FD_ZERO(&rfds);
-     FD_ZERO(&wfds);
- 

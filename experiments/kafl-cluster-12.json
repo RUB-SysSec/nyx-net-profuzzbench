@@ -1,0 +1,18 @@
+{
+    "trials": 10,
+    "timeout": 1440,
+    "nyx_outdir": "/tmp/pfb-eval-24h",
+    "afl_outdir": "/home/kafl/pfb-eval-24h",
+    "targets": [
+        "forked-daapd",
+        "dcmtk",
+        "dnsmasq",
+        "tinydtls"
+    ],
+    "fuzzers": [
+        "nyx",
+        "aflnet",
+        { "type": "aflnet", "no_state": true },
+        "aflnwe"
+    ]
+}
