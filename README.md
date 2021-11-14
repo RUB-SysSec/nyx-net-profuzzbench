@@ -47,7 +47,7 @@ protocol-fuzzing-benchmark
 ## Set up environment
 
 ```bash
-git clone https://github.com/profuzzbench/profuzzbench.git
+git clone https://github.com/RUB-SysSec/nyx-net-profuzzbench.git
 cd profuzzbench
 export PFBENCH=$(pwd)
 export PATH=$PATH:$PFBENCH/scripts/execution:$PFBENCH/scripts/analysis
